@@ -106,18 +106,7 @@
 #pragma config CSEQ =       0xffff
 
 
-static char          c_tmp;
-static char          rx_tmp[10];
-static int           rx_index = 0;
-static unsigned char rtc_val[7];
 static unsigned int  millis = 0;
-static bool          wdt_clear_flag = true;
-
-
-static bool first_start = true;
-static bool relay_started = false;
-static uint32_t relay_time_now = 0;
-static bool plc_run_flag = false;
 
 static void wdt_clear(void)
 {
@@ -129,143 +118,40 @@ static void wdt_clear(void)
   asm volatile("ei");
 }
 
-static char read_char(void)
-{
-  if (uart_rx_any(PIC32_UART_4)) /* Data ready */
-    {
-      return uart_rx_char(PIC32_UART_4);
-    }
-  return 0;
-}
-
-/**
- * override weak def in interrupt.c 
- */
-void timer_2_callback(void)
-{
-  gpio_state_toggle(LED_RED);
-  gpio_state_toggle(LED_GREEN);
-  wdt_clear_flag = true;
-}
-
-void timer_4_callback(void)
-{
-  plc_run_flag = true;
-}
-
-void uart_callback(void)
-{
-
-  gpio_state_toggle(pinE9);
-  c_tmp = read_char();
-  if (c_tmp != '\n')
-    rx_tmp[rx_index] = c_tmp;
-
-  rx_index++;
-  if (rx_index > 9)
-  {
-    rx_index = 0;
-  }
-}
-
 int app_init(void)
 {
 
   sysclk_init();
 
   /* Initial IO as it is set in pic32_config.h */
-  gpio_init();
+  gpio_output_set(LED_ORANGE);
+  gpio_output_set(LED_RED);
+  gpio_output_set(LED_GREEN);
 
   gpio_state_clear(LED_ORANGE);
   gpio_state_clear(LED_RED);
   gpio_state_clear(LED_GREEN);
 
-  uart_rxi_set(PIC32_UART_4, 3, IF_RBUF_NOT_EMPTY, uart_callback);
-  
-  debug_init();
-
-  delay_ms(100);
-
-  debug_print("Hello World\n");
 
   timer_1_init();
 
-  if (timer_init(PIC32_TIMER_2, 2 /* Hz */, 0) < 0)
-  {
-    debug_print("Timer 2 failed to init\n");
-  } 
-
-  if (timer_init(PIC32_TIMER_4, 1000 /* Hz */, 0) < 0)
-  {
-    debug_print("Timer 4 failed to init\n");
-  } 
-
-  i2c_init(100000);
-
-  rtc_init();
-
   interrupt_init();
-
+  gpio_state_set(RELAY_OUT1);
   return 0;
 }
 
 void app_task(void)
 {
-  int c_local;
-
   if (interrupt_tick_get() - millis >= 1000)
     {
       /* test timer/interrupt/gpio */
       gpio_state_toggle(LED_ORANGE);
 
       millis = interrupt_tick_get();
-
-      /* test read rtc/ i2c */
-      rtc_read_time(rtc_val);
     }
 
 
-  if (gpio_state_get(RELAY_OUT5))
-    {
-      if (first_start == true)
-      {
-        first_start = false;
-        relay_time_now = interrupt_tick_get();
-        relay_started = true;
-      }
-    }
-  else
-    {
-      if (relay_started)
-      {
-        relay_started = false;
-        first_start = true;
-        debug_print("Time on %d ms\n", interrupt_tick_get() - relay_time_now);
-      }
-    }
-
-  if ((c_tmp >= 'a') && (c_tmp <= 'z'))
-    {
-      uart_tx_char(PIC32_UART_4, c_tmp);
-      uart_tx_char(PIC32_UART_4, '\n');
-      c_tmp = 0;
-    }
-
-  if (c_tmp == '\n')
-    {
-      debug_print("Word: ");
-
-      for (c_local = 0; c_local<10; c_local++)
-        debug_putc(rx_tmp[c_local]);
-
-      debug_putc('\n');
-      c_tmp = 0;
-    }
-
-  if (wdt_clear_flag)
-  {
-    wdt_clear_flag = false;
-    wdt_clear();
-  }
+  wdt_clear();
+  
 
 }
