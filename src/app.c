@@ -106,7 +106,7 @@
 #pragma config CSEQ =       0xffff
 
 
-static unsigned int  millis = 0;
+static unsigned int  current_time = 0;
 
 static void wdt_clear(void)
 {
@@ -142,12 +142,32 @@ int app_init(void)
 
 void app_task(void)
 {
-  if (interrupt_tick_get() - millis >= 1000)
+  bool detecteur_de_mvt=gpio_state_get(DIG_IN1);
+  static unsigned int m;
+  static bool old_state;
+  if (detecteur_de_mvt==true){
+    gpio_state_set(LED_GREEN );
+    old_state=1;
+  }
+  else if (detecteur_de_mvt==false && old_state==1)
+  {
+    m=interrupt_tick_get();
+    old_state=false;
+  }
+  else{
+    unsigned int r=interrupt_tick_get();
+    if (r-m>=3000){
+      gpio_state_clear(LED_GREEN );
+    }
+  }
+  
+
+  if (interrupt_tick_get() - current_time >= 1000)
     {
       /* test timer/interrupt/gpio */
       gpio_state_toggle(LED_ORANGE);
 
-      millis = interrupt_tick_get();
+      current_time = interrupt_tick_get();
     }
 
 
